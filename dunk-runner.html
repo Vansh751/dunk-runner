@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dunk Runner 🏀</title>
+  <style>
+    :root{
+      --bg1:#0f172a; /* slate-900 */
+      --bg2:#1e293b; /* slate-800 */
+      --accent:#f59e0b; /* amber-500 */
+      --accent-2:#fb923c; /* orange-400 */
+      --good:#22c55e; /* green-500 */
+      --bad:#ef4444; /* red-500 */
+      --ink:#e5e7eb; /* gray-200 */
+      --muted:#94a3b8; /* slate-400 */
+    }
+    html,body{
+      height:100%;
+      margin:0;
+      background:radial-gradient(1200px 600px at 70% -10%, #1f2937 10%, var(--bg1) 60%),
+                 linear-gradient(180deg, var(--bg2), var(--bg1));
+      color:var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      overflow:hidden;
+    }
+    .wrap{
+      position:relative; height:100%; width:100%; display:grid; place-items:center;
+    }
+    canvas{ box-shadow:0 10px 40px rgba(0,0,0,.35); border-radius:18px; background:transparent; }
+    .hud{ position:absolute; inset:0; pointer-events:none; }
+    .topbar{ position:absolute; top:12px; left:12px; right:12px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .chip{ background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); padding:8px 12px; border-radius:999px; font-weight:600; letter-spacing:.2px;}
+    .btn{ pointer-events:auto; background:linear-gradient(180deg, #fbbf24, var(--accent)); border:none; color:#1f2937; font-weight:800; padding:10px 14px; border-radius:12px; box-shadow:0 6px 20px rgba(245,158,11,.35); cursor:pointer; transition:transform .08s ease; }
+    .btn:active{ transform:translateY(1px) scale(.99); }
+    .btn.ghost{ background:rgba(255,255,255,.08); color:var(--ink); box-shadow:none; border:1px solid rgba(255,255,255,.12); }
+    .center-cta{ position:absolute; inset:0; display:grid; place-items:center; pointer-events:none; }
+    .card{ pointer-events:auto; width:min(92vw,560px); background:rgba(2,6,23,.7); backdrop-filter: blur(10px); border:1px solid rgba(255,255,255,.12); border-radius:18px; padding:18px; box-shadow:0 12px 50px rgba(0,0,0,.45); }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .row > *{ flex:1; }
+    .title{ font-size:24px; font-weight:900; letter-spacing:.3px; margin:4px 0 8px; }
+    .subtitle{ color:var(--muted); margin:0 0 14px; }
+    .small{ font-size:12px; color:var(--muted); }
+    .pill{ display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); }
+    .kbd{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; background:rgba(255,255,255,.1); padding:2px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.15); }
+    .bad{ color:var(--bad) }
+    .good{ color:var(--good) }
+    .toggles{ display:flex; gap:10px; flex-wrap:wrap; }
+    label.toggle{ display:flex; align-items:center; gap:8px; cursor:pointer; pointer-events:auto; }
+    input[type="checkbox"]{ width:18px; height:18px; }
+    .footer{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:10px; }
+    .link{ pointer-events:auto; color:var(--ink); text-decoration:underline dashed; opacity:.8 }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <canvas id="game" width="900" height="520" aria-label="Dunk Runner game canvas"></canvas>
+
+    <div class="hud" aria-live="polite">
+      <div class="topbar">
+        <div class="chip" id="score">Score: 0</div>
+        <div class="chip">High: <span id="hi">0</span></div>
+        <div style="display:flex; gap:8px">
+          <button class="btn ghost" id="pauseBtn" title="Pause (P)">Pause</button>
+          <button class="btn" id="startBtn" title="Start / Jump (Space or Tap)">Start</button>
+        </div>
+      </div>
+
+      <div class="center-cta" id="menu">
+        <div class="card" role="dialog" aria-modal="true">
+          <div class="pill" style="width:max-content; font-weight:800">🏀 DUNK RUNNER</div>
+          <div class="title">Jump over obstacles. Collect stars. Don’t crash.</div>
+          <p class="subtitle">Press <span class="kbd">Space</span> / <span class="kbd">↑</span> / tap to jump. Hold for a higher jump.</p>
+
+          <div class="row">
+            <button class="btn" id="playBtn">Play</button>
+            <button class="btn ghost" id="howBtn">How to Play</button>
+          </div>
+
+          <div id="how" style="display:none; margin-top:10px">
+            <ul>
+              <li>Avoid cones and crates. They get faster over time.</li>
+              <li>Grab ⭐ stars for bonus points and a tiny speed slow-down.</li>
+              <li>Three difficulty modes: Easy / Normal / Insane.</li>
+            </ul>
+          </div>
+
+          <div class="toggles" style="margin-top:8px">
+            <label class="toggle"><input type="checkbox" id="sfx" checked> SFX</label>
+            <label class="toggle"><input type="checkbox" id="reducedMotion"> Reduced motion</label>
+            <label class="toggle"><input type="checkbox" id="colorblind"> High contrast</label>
+            <label class="toggle">Difficulty:
+              <select id="difficulty">
+                <option value="easy">Easy</option>
+                <option value="normal" selected>Normal</option>
+                <option value="insane">Insane</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="footer">
+            <div class="small">Tip: Add this file to your website and connect AdSense or show a sponsor banner below the canvas for monetization.</div>
+            <a class="link" href="#" id="resetHi">reset high score</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // --- Utility helpers ------------------------------------------------------
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rand = (a, b) => Math.random() * (b - a) + a;
+
+  // --- Audio (no external assets) ------------------------------------------
+  const audioCtx = typeof AudioContext !== 'undefined' ? new AudioContext() : null;
+  function beep(freq=440, duration=0.08, type='sine', vol=0.1){
+    if(!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.value = vol; o.connect(g); g.connect(audioCtx.destination); o.start();
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    o.stop(audioCtx.currentTime + duration);
+  }
+
+  // --- Game state -----------------------------------------------------------
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let W = canvas.width, H = canvas.height;
+
+  const state = {
+    running:false, paused:false, over:false,
+    time:0, dt:0, last:0,
+    speed:260, baseSpeed:260, maxSpeed:650,
+    gravity:1600,
+    score:0, hi: Number(localStorage.getItem('dunk_hi')||0),
+    difficulty:'normal',
+    reduced:false, highContrast:false, sfx:true,
+  };
+  document.getElementById('hi').textContent = state.hi;
+
+  // Responsive fit (keeps aspect)
+  function fit(){
+    const scale = Math.min(innerWidth / W, innerHeight / H);
+    canvas.style.transform = `scale(${scale})`;
+  }
+  addEventListener('resize', fit); fit();
+
+  // --- Entities -------------------------------------------------------------
+  const player = { x:140, y:H-120, r:22, vy:0, onGround:true, jumpTap:false };
+  const groundY = H-80;
+  const obstacles = []; // {x,y,w,h,type}
+  const stars = [];     // {x,y,r}
+  let spawnTimer = 0, starTimer=0;
+
+  function reset(){
+    state.running = true; state.paused=false; state.over=false; state.time=0; state.speed = speedForDifficulty();
+    state.score = 0; obstacles.length=0; stars.length=0; player.x=140; player.y=groundY - player.r; player.vy=0; player.onGround=true; spawnTimer=0; starTimer=0;
+  }
+  function speedForDifficulty(){
+    switch(state.difficulty){
+      case 'easy': return 220; case 'insane': return 340; default: return 260;
+    }
+  }
+
+  // Spawners
+  function spawnObstacle(){
+    const h = rand(28, 54); const w = rand(28, 54) * (Math.random()<0.5?1.2:1);
+    obstacles.push({ x: W+40, y: groundY - h, w, h, type: Math.random()<0.5?'cone':'crate' });
+  }
+  function spawnStar(){
+    const r = rand(10, 14);
+    const y = rand(H*0.35, groundY - 80);
+    stars.push({ x: W+30, y, r });
+  }
+
+  // Controls
+  let keys = {space:false, up:false};
+  function wantJump(){ return keys.space || keys.up || player.jumpTap; }
+  addEventListener('keydown', (e)=>{
+    if(['Space','ArrowUp','KeyW'].includes(e.code)){ keys.space = true; keys.up = true; e.preventDefault(); if(!state.running||state.over){ startGame(); }}
+    if(e.code==='KeyP'){ togglePause(); }
+  });
+  addEventListener('keyup', (e)=>{ if(['Space','ArrowUp','KeyW'].includes(e.code)){ keys.space=false; keys.up=false; }});
+  canvas.addEventListener('pointerdown', ()=>{ player.jumpTap=true; if(!state.running||state.over) startGame(); });
+  canvas.addEventListener('pointerup', ()=>{ player.jumpTap=false; });
+
+  // UI buttons
+  const menu = document.getElementById('menu');
+  document.getElementById('playBtn').onclick = startGame;
+  document.getElementById('howBtn').onclick = ()=>{
+    const el = document.getElementById('how'); el.style.display = el.style.display==='none'?'block':'none';
+  };
+  document.getElementById('startBtn').onclick = startGame;
+  document.getElementById('pauseBtn').onclick = togglePause;
+  document.getElementById('sfx').onchange = (e)=> state.sfx = e.target.checked;
+  document.getElementById('reducedMotion').onchange = (e)=> state.reduced = e.target.checked;
+  document.getElementById('colorblind').onchange = (e)=> state.highContrast = e.target.checked;
+  document.getElementById('difficulty').onchange = (e)=> state.difficulty = e.target.value;
+  document.getElementById('resetHi').onclick = (e)=>{ e.preventDefault(); localStorage.removeItem('dunk_hi'); state.hi=0; document.getElementById('hi').textContent='0'; };
+
+  function startGame(){ menu.style.display='none'; if(audioCtx && audioCtx.state==='suspended') audioCtx.resume(); reset(); beep(660,0.07,'square',0.05); }
+  function togglePause(){ if(!state.running||state.over) return; state.paused = !state.paused; document.getElementById('pauseBtn').textContent = state.paused? 'Resume' : 'Pause'; }
+
+  // --- Physics & Update -----------------------------------------------------
+  function update(dt){
+    if(state.paused||!state.running||state.over) return;
+
+    // difficulty scaling
+    state.time += dt; const accel = state.reduced? 0.4 : 0.9; // slower if reduced motion
+    state.speed = clamp(state.baseSpeed + state.time * accel * (state.difficulty==='insane'? 28 : state.difficulty==='easy'? 10 : 18), state.baseSpeed, state.maxSpeed);
+
+    // player gravity & jump
+    player.vy += state.gravity * dt;
+    if(player.onGround && wantJump()){
+      player.vy = - (state.difficulty==='insane'? 620 : 720);
+      player.onGround = false; if(state.sfx) beep(520,0.05,'triangle',0.08);
+    } else if(!player.onGround && !wantJump() && player.vy < -180){
+      // variable jump height (release early)
+      player.vy = -180;
+    }
+
+    player.y += player.vy * dt; if(player.y + player.r >= groundY){ player.y = groundY - player.r; player.vy = 0; player.onGround = true; }
+
+    // spawn logic
+    spawnTimer -= dt; if(spawnTimer<=0){ spawnObstacle(); spawnTimer = rand(0.9, 1.6) / (state.difficulty==='insane'?1.2:1); }
+    starTimer -= dt; if(starTimer<=0){ spawnStar(); starTimer = rand(1.2, 2.4); }
+
+    // move & cull obstacles
+    const spd = state.speed; const sx = spd * dt;
+    for(let i=obstacles.length-1;i>=0;i--){ const o = obstacles[i]; o.x -= sx; if(o.x+o.w < -40) obstacles.splice(i,1); }
+    for(let i=stars.length-1;i>=0;i--){ const s = stars[i]; s.x -= sx; if(s.x + s.r < -40) stars.splice(i,1); }
+
+    // collisions
+    for(const o of obstacles){ if(rectCircleCollide(player.x, player.y, player.r, o.x, o.y, o.w, o.h)){ gameOver(); return; } }
+    for(let i=stars.length-1;i>=0;i--){ const s=stars[i]; if(circleCollide(player.x, player.y, player.r, s.x, s.y, s.r)){
+        stars.splice(i,1); state.score += 5; if(state.sfx) beep(880,0.05,'sine',0.08); state.time = Math.max(0, state.time - 0.15); // micro slow
+      }
+    }
+
+    // scoring over time
+    state.score += dt * 2; // passive score
+    document.getElementById('score').textContent = 'Score: ' + Math.floor(state.score);
+  }
+
+  function gameOver(){
+    state.over = true; state.running = false; if(state.sfx) beep(180,0.18,'sawtooth',0.08);
+    const sc = Math.floor(state.score); if(sc > state.hi){ state.hi = sc; localStorage.setItem('dunk_hi', sc); document.getElementById('hi').textContent=sc; }
+    // show menu overlay again with quick summary
+    setTimeout(()=>{ menu.style.display='grid'; menu.querySelector('.title').textContent = `Score: ${sc}`; }, 400);
+  }
+
+  function rectCircleCollide(cx, cy, cr, rx, ry, rw, rh){
+    const nx = clamp(cx, rx, rx+rw), ny = clamp(cy, ry, ry+rh);
+    const dx = cx - nx, dy = cy - ny; return (dx*dx + dy*dy) <= cr*cr;
+  }
+  function circleCollide(x1,y1,r1,x2,y2,r2){ const dx=x1-x2, dy=y1-y2; return (dx*dx+dy*dy) <= (r1+r2)*(r1+r2); }
+
+  // --- Render ---------------------------------------------------------------
+  function draw(){
+    // clear
+    ctx.clearRect(0,0,W,H);
+
+    // background / parallax
+    drawSky();
+    drawHorizon();
+
+    // stars
+    for(const s of stars){ drawStar(s); }
+
+    // obstacles
+    for(const o of obstacles){ drawObstacle(o); }
+
+    // player
+    drawPlayer(player);
+  }
+
+  function drawSky(){
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, state.highContrast? '#0a0a0a':'#0b1022');
+    g.addColorStop(1, state.highContrast? '#1a1a1a':'#141b32');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+    if(state.reduced) return;
+    // subtle moving dots
+    const t = state.time*0.3; ctx.globalAlpha = 0.25; ctx.fillStyle = '#ffffff';
+    for(let i=0;i<60;i++){
+      const x = (i*150 - (t*40)%150); const y = 40 + (i*27)%200; ctx.fillRect((x% (W+200))-100, y, 2,2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawHorizon(){
+    // track
+    ctx.fillStyle = state.highContrast? '#d1d5db' : '#e2e8f0';
+    ctx.fillRect(0, groundY, W, 6);
+
+    // ground
+    ctx.fillStyle = state.highContrast? '#737373' : '#374151';
+    ctx.fillRect(0, groundY+6, W, H-groundY-6);
+
+    if(state.reduced) return;
+    // parallax blocks
+    ctx.fillStyle = 'rgba(255,255,255,.04)';
+    const t = state.time * (state.speed/200);
+    for(let i=0;i<8;i++){
+      const x = (i*220 - (t*30)%(W+220));
+      ctx.fillRect(x, groundY-30 - (i%2)*14, 80, 18);
+    }
+  }
+
+  function drawPlayer(p){
+    // ball shadow
+    ctx.globalAlpha = 0.3; ctx.beginPath(); ctx.ellipse(p.x, groundY + 16, p.r*0.9, p.r*0.4, 0, 0, Math.PI*2); ctx.fillStyle = '#000'; ctx.fill(); ctx.globalAlpha = 1;
+
+    // basketball
+    const r = p.r; const x=p.x, y=p.y;
+    const grad = ctx.createRadialGradient(x-r*0.6,y-r*0.6,r*0.2,x,y,r);
+    grad.addColorStop(0, state.highContrast? '#ffffff' : '#ffce7a');
+    grad.addColorStop(1, state.highContrast? '#f97316' : '#f59e0b');
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+    // lines
+    ctx.strokeStyle = state.highContrast? '#111827' : '#8a4b0a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x-r,y); ctx.lineTo(x+r,y); ctx.moveTo(x, y-r); ctx.lineTo(x,y+r);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(x,y,r,Math.PI*0.2, Math.PI*0.8); ctx.moveTo(x+r*Math.cos(-0.2), y+r*Math.sin(-0.2)); ctx.arc(x,y,r,-0.2, Math.PI+0.2);
+    ctx.stroke();
+  }
+
+  function drawObstacle(o){
+    if(o.type==='cone'){
+      ctx.fillStyle = state.highContrast? '#ef4444' : '#fb923c';
+      ctx.beginPath(); ctx.moveTo(o.x, o.y+o.h); ctx.lineTo(o.x+o.w/2, o.y); ctx.lineTo(o.x+o.w, o.y+o.h); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(o.x+o.w*0.3, o.y+o.h*0.55, o.w*0.4, 4);
+    } else {
+      ctx.fillStyle = state.highContrast? '#f59e0b' : '#eab308';
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+      ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth=2; ctx.strokeRect(o.x+2, o.y+2, o.w-4, o.h-4);
+    }
+  }
+
+  function drawStar(s){
+    ctx.save(); ctx.translate(s.x, s.y); ctx.fillStyle = state.highContrast? '#22c55e' : '#fde047';
+    const spikes=5, outer=s.r, inner=s.r*0.5; ctx.beginPath();
+    for(let i=0;i<spikes*2;i++){
+      const ang = (i*Math.PI)/spikes; const r = (i%2===0)? outer: inner;
+      ctx.lineTo(Math.cos(ang)*r, Math.sin(ang)*r);
+    }
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+
+  // --- Main loop ------------------------------------------------------------
+  function loop(t){
+    const now = t/1000; if(!state.last) state.last = now; state.dt = clamp(now - state.last, 0, 0.033); state.last = now;
+    if(state.running && !state.paused){ update(state.dt); }
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // Accessibility: keyboard focus
+  canvas.setAttribute('tabindex', '0'); canvas.focus();
+  </script>
+</body>
+</html>
